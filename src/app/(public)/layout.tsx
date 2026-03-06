@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, ReactNode } from "react";
 import Link from "next/link";
 import { useClinic } from "@/hooks/use-clinic";
@@ -8,9 +8,19 @@ import { ClinicBrandingWrapper } from "@/components/clinic-branding-wrapper";
 import { BookingProvider, useBooking } from "@/hooks/use-booking";
 import { Toaster } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Menu, X, CalendarDays } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Separator } from "@/components/ui/separator";
+import { Menu, X, CalendarDays, LogIn, UserPlus, LayoutDashboard, UserCircle, LogOut } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+
+interface AuthUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  clinicId: string;
+}
 
 function ClinicSetup({ clinicId, clinicSlug }: { clinicId: string; clinicSlug: string }) {
   const { setClinic } = useBooking();
@@ -26,9 +36,45 @@ function ClinicSetup({ clinicId, clinicSlug }: { clinicId: string; clinicSlug: s
 
 function PublicLayoutInner({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const clinicSlug = searchParams.get("clinic") || "smile-dental";
   const { clinic, loading, error } = useClinic(clinicSlug);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const checkAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+      } else {
+        setUser(null);
+      }
+    } catch {
+      setUser(null);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  const handleLogout = async () => {
+    try {
+      // Clear cookies by setting them to expire
+      document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      setUser(null);
+      setMobileMenuOpen(false);
+      router.push(`/?clinic=${clinicSlug}`);
+    } catch {
+      // Silently handle logout errors
+    }
+  };
 
   if (loading) {
     return (
@@ -67,6 +113,16 @@ function PublicLayoutInner({ children }: { children: ReactNode }) {
     { href: `/book?clinic=${clinicSlug}`, label: "Book" },
   ];
 
+  const authLinks = user
+    ? [
+        { href: `/dashboard?clinic=${clinicSlug}`, label: "Dashboard", icon: LayoutDashboard },
+        { href: `/dashboard/profile?clinic=${clinicSlug}`, label: "Profile", icon: UserCircle },
+      ]
+    : [
+        { href: `/login?clinic=${clinicSlug}`, label: "Login", icon: LogIn },
+        { href: `/register?clinic=${clinicSlug}`, label: "Register", icon: UserPlus },
+      ];
+
   return (
     <ClinicBrandingWrapper
       primaryColor={clinic.primaryColor}
@@ -93,6 +149,26 @@ function PublicLayoutInner({ children }: { children: ReactNode }) {
                 </Button>
               </Link>
             ))}
+
+            {!authLoading && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-6" />
+                {authLinks.map((link) => (
+                  <Link key={link.href} href={link.href}>
+                    <Button variant="ghost" size="sm">
+                      <link.icon className="mr-1.5 h-4 w-4" />
+                      {link.label}
+                    </Button>
+                  </Link>
+                ))}
+                {user && (
+                  <Button variant="ghost" size="sm" onClick={handleLogout}>
+                    <LogOut className="mr-1.5 h-4 w-4" />
+                    Logout
+                  </Button>
+                )}
+              </>
+            )}
           </nav>
 
           {/* Mobile menu button */}
@@ -125,6 +201,35 @@ function PublicLayoutInner({ children }: { children: ReactNode }) {
                   </Button>
                 </Link>
               ))}
+
+              {!authLoading && (
+                <>
+                  <Separator className="my-1" />
+                  {authLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <link.icon className="mr-1.5 h-4 w-4" />
+                        {link.label}
+                      </Button>
+                    </Link>
+                  ))}
+                  {user && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="mr-1.5 h-4 w-4" />
+                      Logout
+                    </Button>
+                  )}
+                </>
+              )}
             </nav>
           </div>
         )}
