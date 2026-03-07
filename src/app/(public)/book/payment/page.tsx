@@ -28,13 +28,12 @@ export default function PaymentPage() {
     }
   }, [state.service, state.timeSlot, state.patientDetails, router, clinicSlug]);
 
-  const handleSubmit = async () => {
+  const createBooking = async (uploadFile: boolean) => {
     if (!state.service || !state.timeSlot || !state.patientDetails) return;
 
     setSubmitting(true);
 
     try {
-      // Step 1: Create the booking
       const bookingPayload = {
         clinicId: state.clinicId,
         serviceId: state.service.id,
@@ -42,6 +41,12 @@ export default function PaymentPage() {
         date: state.date,
         startTime: state.timeSlot.start,
         notes: state.patientDetails.notes || undefined,
+        patientDetails: {
+          firstName: state.patientDetails.firstName,
+          lastName: state.patientDetails.lastName,
+          email: state.patientDetails.email,
+          phone: state.patientDetails.phone,
+        },
       };
 
       const bookRes = await fetch("/api/bookings", {
@@ -58,17 +63,13 @@ export default function PaymentPage() {
       const appointment = await bookRes.json();
       setAppointmentId(appointment.id);
 
-      // Step 2: Upload payment proof if provided
-      if (paymentFile) {
+      if (uploadFile && paymentFile) {
         const formData = new FormData();
         formData.append("file", paymentFile);
 
         const uploadRes = await fetch(
           `/api/bookings/${appointment.id}/payment-proof`,
-          {
-            method: "POST",
-            body: formData,
-          }
+          { method: "POST", body: formData }
         );
 
         if (uploadRes.ok) {
@@ -77,46 +78,6 @@ export default function PaymentPage() {
           toast.error("Appointment booked but payment proof upload failed. You can upload it later.");
         }
       }
-
-      toast.success("Appointment booked successfully!");
-      router.push(`/book/confirmation?clinic=${clinicSlug}`);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to book appointment. Please try again."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSkipPayment = async () => {
-    if (!state.service || !state.timeSlot || !state.patientDetails) return;
-
-    setSubmitting(true);
-
-    try {
-      const bookingPayload = {
-        clinicId: state.clinicId,
-        serviceId: state.service.id,
-        dentistId: state.timeSlot.dentistId,
-        date: state.date,
-        startTime: state.timeSlot.start,
-        notes: state.patientDetails.notes || undefined,
-      };
-
-      const bookRes = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bookingPayload),
-      });
-
-      if (!bookRes.ok) {
-        const errData = await bookRes.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to create appointment");
-      }
-
-      const appointment = await bookRes.json();
-      setAppointmentId(appointment.id);
 
       toast.success("Appointment booked successfully!");
       router.push(`/book/confirmation?clinic=${clinicSlug}`);
@@ -210,7 +171,7 @@ export default function PaymentPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
-          onClick={handleSkipPayment}
+          onClick={() => createBooking(false)}
           disabled={submitting}
         >
           {submitting ? (
@@ -218,11 +179,11 @@ export default function PaymentPage() {
           ) : null}
           Skip &mdash; Pay at Clinic
         </Button>
-        <Button onClick={handleSubmit} disabled={submitting || !paymentFile}>
+        <Button onClick={() => createBooking(true)} disabled={submitting}>
           {submitting ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : null}
-          Submit Booking
+          {paymentFile ? "Submit Booking" : "Book Without Payment"}
         </Button>
       </div>
     </div>
