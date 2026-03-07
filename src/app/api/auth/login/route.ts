@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
   if (!user) return errorResponse("Invalid credentials", 401);
   if (!user.isActive) return errorResponse("Account deactivated", 403);
 
+  if (!user.passwordHash) return errorResponse("This account uses passwordless login. Please use the Email Code tab.", 401);
   const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) return errorResponse("Invalid credentials", 401);
 

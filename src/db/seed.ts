@@ -313,6 +313,16 @@ async function seed() {
     role: "patient",
   });
 
+  // ===== GUEST PATIENT (no password) — CLINIC 1 =====
+  await db.insert(users).values({
+    clinicId: clinic1.id,
+    email: "guest.patient@gmail.com",
+    firstName: "Guest",
+    lastName: "Patient",
+    phone: "+63 999 000 1111",
+    role: "patient",
+  }).onConflictDoNothing();
+
   // ===== APPOINTMENTS — CLINIC 1 =====
   const today = new Date();
   const cleaning = createdServices1.find((s) => s.name === "Dental Cleaning")!;
@@ -505,6 +515,7 @@ async function seed() {
   console.log("  Patient         : mark.v@gmail.com");
   console.log("  Patient         : joy.ramos@yahoo.com");
   console.log("  Patient         : carlo.b@gmail.com");
+  console.log("  Guest (no pwd)  : guest.patient@gmail.com");
   console.log("  ─── BrightSmile ───");
   console.log("  Clinic Admin    : admin@brightsmile.ph");
   console.log("  Dentist         : dr.garcia@brightsmile.ph");
