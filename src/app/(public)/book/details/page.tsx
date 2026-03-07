@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Clock, DollarSign, CalendarDays, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clock, DollarSign, CalendarDays, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { BookingProgress } from "@/components/booking/booking-progress";
 import { useBooking } from "@/hooks/use-booking";
+import { useClinic } from "@/hooks/use-clinic";
 
 function formatTime(time: string): string {
   const [h, m] = time.split(":");
@@ -26,6 +27,7 @@ export default function PatientDetailsPage() {
   const searchParams = useSearchParams();
   const clinicSlug = searchParams.get("clinic") || "smile-dental";
   const { state, setPatientDetails } = useBooking();
+  const { clinic } = useClinic(clinicSlug);
 
   const [firstName, setFirstName] = useState(state.patientDetails?.firstName || "");
   const [lastName, setLastName] = useState(state.patientDetails?.lastName || "");
@@ -33,6 +35,15 @@ export default function PatientDetailsPage() {
   const [phone, setPhone] = useState(state.patientDetails?.phone || "");
   const [notes, setNotes] = useState(state.patientDetails?.notes || "");
   const [loadingUser, setLoadingUser] = useState(true);
+
+  // OTP state
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   useEffect(() => {
     if (!state.service || !state.timeSlot) {
@@ -62,7 +73,99 @@ export default function PatientDetailsPage() {
     prefillUser();
   }, [state.service, state.timeSlot, router, clinicSlug]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Reset OTP state when email changes
+  useEffect(() => {
+    setOtpRequired(false);
+    setOtpSent(false);
+    setOtpCode("");
+    setOtpVerified(false);
+    setOtpError("");
+  }, [email]);
+
+  const sendOtp = async () => {
+    if (!clinic) {
+      setOtpError("Clinic information not available. Please try again.");
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError("");
+
+    try {
+      const res = await fetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          clinicId: clinic.id,
+          clinicName: clinic.name,
+          purpose: "booking_verify",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setOtpError(data.error || "Failed to send verification code.");
+        return;
+      }
+
+      setOtpSent(true);
+    } catch {
+      setOtpError("Network error. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (!clinic) {
+      setOtpError("Clinic information not available. Please try again.");
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError("");
+
+    try {
+      const res = await fetch("/api/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          clinicId: clinic.id,
+          code: otpCode,
+          purpose: "booking_verify",
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setOtpError(data.error || "Invalid or expired code. Please try again.");
+        return;
+      }
+
+      setOtpVerified(true);
+
+      // Save patient details and navigate to payment
+      setPatientDetails({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        notes: notes.trim(),
+      });
+
+      router.push(`/book/payment?clinic=${clinicSlug}`);
+    } catch {
+      setOtpError("Network error. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim()) {
@@ -76,15 +179,56 @@ export default function PatientDetailsPage() {
       return;
     }
 
-    setPatientDetails({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      notes: notes.trim(),
-    });
+    // If already verified via OTP, proceed directly
+    if (otpVerified) {
+      setPatientDetails({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        notes: notes.trim(),
+      });
+      router.push(`/book/payment?clinic=${clinicSlug}`);
+      return;
+    }
 
-    router.push(`/book/payment?clinic=${clinicSlug}`);
+    // Check if email exists for this clinic
+    const clinicId = state.clinicId || clinic?.id;
+    if (!clinicId) {
+      toast.error("Clinic information not available. Please try again.");
+      return;
+    }
+
+    setCheckingEmail(true);
+
+    try {
+      const res = await fetch(
+        `/api/users/check-email?email=${encodeURIComponent(email.trim())}&clinicId=${encodeURIComponent(clinicId)}`
+      );
+      const data = await res.json();
+
+      if (data.exists) {
+        // Email exists — require OTP verification
+        setOtpRequired(true);
+        await sendOtp();
+        return;
+      }
+
+      // Email is new — proceed to payment
+      setPatientDetails({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        notes: notes.trim(),
+      });
+
+      router.push(`/book/payment?clinic=${clinicSlug}`);
+    } catch {
+      toast.error("Failed to verify email. Please try again.");
+    } finally {
+      setCheckingEmail(false);
+    }
   };
 
   if (!state.service || !state.timeSlot) return null;
@@ -185,12 +329,79 @@ export default function PatientDetailsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-2">
-                <Button type="submit" className="gap-2">
-                  Continue to Payment
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* OTP Verification Section */}
+              {otpRequired && !otpVerified && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+                  <p className="text-sm text-blue-800">
+                    This email is linked to an existing account. Please verify with the code sent to{" "}
+                    <span className="font-medium">{email}</span>.
+                  </p>
+
+                  {otpError && (
+                    <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+                      {otpError}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="otpCode">6-Digit Code</Label>
+                    <Input
+                      id="otpCode"
+                      type="text"
+                      placeholder="000000"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="one-time-code"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={verifyOtp}
+                      disabled={otpLoading || otpCode.length !== 6}
+                      className="gap-2"
+                    >
+                      {otpLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify & Continue"
+                      )}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={sendOtp}
+                      disabled={otpLoading}
+                      className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                    >
+                      Resend Code
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!otpRequired && (
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" className="gap-2" disabled={checkingEmail}>
+                    {checkingEmail ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>
+                        Continue to Payment
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </form>
           </CardContent>
         </Card>
