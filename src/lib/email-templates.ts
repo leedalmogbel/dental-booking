@@ -189,3 +189,31 @@ export function appointmentCancelledEmail(data: {
 
   return { subject, html: baseLayout(data.clinicName, body) };
 }
+
+// ---------------------------------------------------------------------------
+// OTP Verification
+// ---------------------------------------------------------------------------
+export function otpEmail(data: {
+  clinicName: string;
+  code: string;
+  purpose: "booking_verify" | "login";
+}): { subject: string; html: string } {
+  const purposeText = data.purpose === "login"
+    ? "Sign in to your account"
+    : "Verify your email to complete booking";
+
+  const subject = `${data.code} — Your verification code`;
+
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:20px;color:#111827;">${purposeText}</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#374151;">Use the code below to continue. It expires in 5 minutes.</p>
+
+    <div style="text-align:center;margin:24px 0;">
+      <span style="display:inline-block;font-size:36px;font-weight:700;letter-spacing:8px;color:#111827;background-color:#f3f4f6;padding:16px 32px;border-radius:8px;border:1px solid #e5e7eb;">${data.code}</span>
+    </div>
+
+    <p style="margin:24px 0 0;font-size:14px;color:#6b7280;">If you did not request this code, you can safely ignore this email.</p>
+  `;
+
+  return { subject, html: baseLayout(data.clinicName, body) };
+}
