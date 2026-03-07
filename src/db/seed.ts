@@ -2,10 +2,11 @@ import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
 import { drizzle } from "drizzle-orm/postgres-js";
+import { sql } from "drizzle-orm";
 import postgres from "postgres";
 import {
   clinics, users, dentists, services, dentistServices,
-  appointments, treatmentRecords, patientProfiles, subscriptions, waitlist,
+  appointments, treatmentRecords, patientProfiles, subscriptions, waitlist, notifications,
 } from "./schema";
 import bcrypt from "bcryptjs";
 
@@ -30,6 +31,20 @@ function addMinutesToTime(time: string, mins: number): string {
 
 async function seed() {
   console.log("Seeding database with full demo data...\n");
+
+  // Clean existing data (order matters for foreign keys)
+  await db.delete(waitlist);
+  await db.delete(notifications);
+  await db.delete(treatmentRecords);
+  await db.delete(appointments);
+  await db.delete(subscriptions);
+  await db.delete(patientProfiles);
+  await db.delete(dentistServices);
+  await db.delete(dentists);
+  await db.delete(services);
+  await db.delete(users);
+  await db.delete(clinics);
+  console.log("Cleared existing data.\n");
 
   // ===== CLINIC 1: Smile Dental =====
   const [clinic1] = await db.insert(clinics).values({
