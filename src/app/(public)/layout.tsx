@@ -65,15 +65,14 @@ function PublicLayoutInner({ children }: { children: ReactNode }) {
 
   const handleLogout = async () => {
     try {
-      // Clear cookies by setting them to expire
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
       document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       document.cookie = "refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      setUser(null);
-      setMobileMenuOpen(false);
-      router.push(`/?clinic=${clinicSlug}`);
-    } catch {
-      // Silently handle logout errors
     }
+    setUser(null);
+    setMobileMenuOpen(false);
+    router.push(`/?clinic=${clinicSlug}`);
   };
 
   if (loading) {

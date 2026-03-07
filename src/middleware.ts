@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
-export function middleware(request: NextRequest) {
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
+
+async function isValidToken(token: string): Promise<boolean> {
+  try {
+    await jwtVerify(token, JWT_SECRET);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "";
   const appDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || "localhost:3000";
 
@@ -11,25 +23,20 @@ export function middleware(request: NextRequest) {
   } else if (hostname.endsWith(`.${appDomain}`)) {
     clinicSlug = hostname.replace(`.${appDomain}`, "");
   } else {
-    // Local dev: use query param as fallback
     clinicSlug = request.nextUrl.searchParams.get("clinic") || "";
   }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-clinic-slug", clinicSlug);
 
-  // Protect staff routes
-  if (request.nextUrl.pathname.startsWith("/staff")) {
-    const token = request.cookies.get("access_token")?.value;
-    if (!token) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-  }
+  // Protect staff and admin routes
+  const isProtected =
+    request.nextUrl.pathname.startsWith("/staff") ||
+    request.nextUrl.pathname.startsWith("/admin");
 
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith("/admin")) {
+  if (isProtected) {
     const token = request.cookies.get("access_token")?.value;
-    if (!token) {
+    if (!token || !(await isValidToken(token))) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }

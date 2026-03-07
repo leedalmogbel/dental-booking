@@ -22,6 +22,10 @@ export async function POST(req: NextRequest) {
     const [clinic] = await db.select().from(clinics).where(eq(clinics.slug, clinicSlug)).limit(1);
     if (!clinic) return errorResponse("Clinic not found", 404);
     [user] = await db.select().from(users).where(and(eq(users.email, email), eq(users.clinicId, clinic.id))).limit(1);
+    // Fall back to super_admin lookup if no clinic-scoped user found
+    if (!user) {
+      [user] = await db.select().from(users).where(and(eq(users.email, email), eq(users.role, "super_admin"))).limit(1);
+    }
   } else {
     [user] = await db.select().from(users).where(and(eq(users.email, email), eq(users.role, "super_admin"))).limit(1);
   }
