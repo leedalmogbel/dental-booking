@@ -9,3 +9,4 @@ export * from "./patient-profiles";
 export * from "./notifications";
 export * from "./waitlist";
 export * from "./subscriptions";
+export * from "./otp-codes";

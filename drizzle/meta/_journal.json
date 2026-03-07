@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1772905858897,
+      "tag": "0000_medical_saracen",
+      "breakpoints": true
+    }
+  ]
+}
